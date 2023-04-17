@@ -8,6 +8,7 @@ static class Start {
       Test2 ();      // Test ExprTyper and ExprGrapher
       Test3 ();      // Type checks on various expressions
       Test4 ();      // Tokenizer - printout of invalid token
+      Test5 ();        // Test XML generation file
    }
 
    // Test ExprEval and ExprILGen
@@ -113,4 +114,23 @@ static class Start {
         end
       end.
       """;
+
+   // Test XML file generation
+   static void Test5 () {
+      string expr = "(pi + 3.5) + 2 <= 1 <> \"Hello\" + two > true + \"World\"";
+      var node = new Parser (new Tokenizer (expr)).Parse ();
+
+      Console.WriteLine ("-----------------");
+      Console.WriteLine ($"Expression = {expr}");
+      Dictionary<string, NType> types = new () { ["pi"] = NType.Real, ["two"] = NType.Int };
+      NType type = node.Accept (new ExprTyper (types));
+      Console.WriteLine ($"Type = {type}");
+
+      var xml = new ExprXML (expr);
+      Directory.CreateDirectory ("c:/etc");
+      xml.SaveTo ("c:/etc/test.xml", node.Accept (xml));
+      var pi = new ProcessStartInfo ("c:/etc/test.xml") { UseShellExecute = true };
+      Process.Start (pi);
+      Console.Write ("\nPress any key..."); Console.ReadKey (true);
+   }
 }
