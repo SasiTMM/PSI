@@ -4,9 +4,9 @@ using System.Diagnostics;
 
 static class Start {
    static void Main () {
-      Test1 ();      // Test ExprEval and ExprILGen
-      Test2 ();      // Test ExprTyper and ExprGrapher
-      Test3 ();      // Type checks on various expressions
+      //Test1 ();      // Test ExprEval and ExprILGen
+      //Test2 ();      // Test ExprTyper and ExprGrapher
+      //Test3 ();      // Type checks on various expressions
       Test4 ();      // Tokenizer - printout of invalid token
    }
 
@@ -80,7 +80,10 @@ static class Start {
       Console.WriteLine (); Console.WriteLine ();
 
       Console.WriteLine ("Testing invalid program:");
+      //var prog1 = Prog0.Replace ("prod := 1;", "prod := 1?");
       var prog1 = Prog0.Replace ("prod * i;", "prod * i?");
+      //var prog1 = Prog0.Replace ("\", fib);", "\", fib)?");
+
       tokenizer = new Tokenizer (prog1);
       for (; ; ) {
          var token = tokenizer.Next ();
