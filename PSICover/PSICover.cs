@@ -150,6 +150,8 @@ class Analyzer {
    void GenerateOutputs () {
       ulong[] hits = File.ReadAllLines ($"{Dir}/hits.txt").Select (ulong.Parse).ToArray ();
       var files = mBlocks.Select (a => a.File).Distinct ().ToArray ();
+      List<Summary> mSum = new ();
+
       foreach (var file in files) {
          var blocks = mBlocks.Where (a => a.File == file)
                              .OrderBy (a => a.SPosition)
@@ -160,21 +162,70 @@ class Analyzer {
                blocks.RemoveAt (i - 1);
          blocks.Reverse ();
 
+         int hitscount = 0;
          var code = File.ReadAllLines (file);
          for (int i = 0; i < code.Length; i++)
             code[i] = code[i].Replace ('<', '\u00ab').Replace ('>', '\u00bb');
          foreach (var block in blocks) {
             bool hit = hits[block.Id] > 0;
-            string tag = $"<span class=\"{(hit ? "hit" : "unhit")}\">";
-            code[block.ELine] = code[block.ELine].Insert (block.ECol, "</span>");
-            code[block.SLine] = code[block.SLine].Insert (block.SCol, tag);
+            if (hit) hitscount++;
+            string endtag = hit ? $"<span class=\"tooltiptext\">{hits[block.Id]}hits</span></div>" : "</div>";
+            string starttag = $"<div class=\"{(hit ? "hit" : "unhit")}\">";
+            int multilines = block.ELine - block.SLine;
+            if (multilines > 0) {
+               for (int i = multilines; i >= 0; i--) {
+                  int scol = 0;
+                  foreach (char ch in code[block.SLine + i])
+                     if (char.IsWhiteSpace (ch)) scol++;
+                     else break;
+                  code[block.SLine + i] = code[block.SLine + i].Insert (code[block.SLine + i].Length, endtag);
+                  code[block.SLine + i] = code[block.SLine + i].Insert (scol, starttag);
+               }
+            } else {
+               code[block.ELine] = code[block.ELine].Insert (block.ECol, endtag);
+               code[block.SLine] = code[block.SLine].Insert (block.SCol, starttag);
+            }
          }
+
+         double sumpercent = Math.Round (100.0 * hitscount / blocks.Count, 1);
+
+         mSum.Add (new Summary (Path.GetFileNameWithoutExtension (file), blocks.Count, hitscount, sumpercent));
+
          string htmlfile = $"{Dir}/HTML/{Path.GetFileNameWithoutExtension (file)}.html";
 
          string html = $$"""
             <html><head><style>
-            .hit { background-color:aqua; }
-            .unhit { background-color:orange; }
+            .hit { 
+               position: relative;
+               display: inline-block;
+               border-bottom: 1px dotted black;
+               background-color:aqua;
+            }
+
+            .unhit { 
+               position: relative;
+               display: inline-block;
+               border-bottom: 1px dotted black;
+               background-color:orange;
+            }
+            
+            .hit .tooltiptext {
+              visibility: hidden;
+              width: 60px;
+              background-color: black;
+              color: #fff;
+              text-align: center;
+              border-radius: 3px;
+              padding: 2px 0;
+              position: absolute;
+              z-index: 1;
+              top: -2px;
+              left: 100.5%;
+            }
+
+            .hit:hover .tooltiptext {
+              visibility: visible;
+            }
             </style></head>
             <body><pre>
             {{string.Join ("\r\n", code)}}
@@ -183,6 +234,52 @@ class Analyzer {
          html = html.Replace ("\u00ab", "&lt;").Replace ("\u00bb", "&gt;");
          File.WriteAllText (htmlfile, html);
       }
+      var cSum = mSum.OrderBy (a => a.Percent).ToList ();
+
+      string sumcov = "";
+
+      for (int i = 0; i < cSum.Count; i++) {
+         sumcov += $"""
+               <tr>
+                  <td>{i + 1}</td>
+                  <td>{cSum[i].Filename}</td>
+                  <td>{cSum[i].Counts}</td>
+                  <td>{cSum[i].Hits}</td>
+                  <td>{cSum[i].Percent}%</td>
+               </tr>
+
+            """;
+      }
+
+      string summaryfile = $"{Dir}/HTML/CoverageSummary.html";
+
+      string tablehtml = $$"""
+         <html>
+         <style>
+         table, th, td {
+           border:1px solid black;
+           border-collapse: collapse;
+         }
+         </style>
+
+         <body>
+
+         <table>
+            <tr>
+               <th>S.No.</th>
+               <th>FileName</th>
+               <th>Counts</th>
+               <th>Hits</th>
+               <th>Percentage</th>
+            </tr>
+         {{string.Join ("\r\n", sumcov)}}</table>
+
+         </body>
+         </html>
+         """;
+
+      File.WriteAllText (summaryfile, tablehtml);
+
       int cBlocks = mBlocks.Count, cHit = hits.Count (a => a > 0);
       double percent = Math.Round (100.0 * cHit / cBlocks, 1);
       Console.WriteLine ($"Coverage: {cHit}/{cBlocks}, {percent}%");
@@ -231,6 +328,17 @@ class Block {
    public int EPosition => ELine * 10000 + ECol;
    public readonly string File;
    static string sLastFile = "";
+}
+
+class Summary {
+   public Summary (string filename, int counts, int hits, double percent) {
+      (Filename, Counts, Hits, Percent) = (filename, counts, hits, percent);
+   }
+
+   public readonly string Filename;
+   public readonly int Counts;
+   public readonly int Hits;
+   public readonly double Percent;
 }
 
 static class Program {
