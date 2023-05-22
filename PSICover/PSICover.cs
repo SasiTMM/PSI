@@ -1,5 +1,7 @@
 ﻿namespace PSICover;
 using System.Diagnostics;
+using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 
 // The CoverageAnalyzer for .Net
@@ -162,34 +164,28 @@ class Analyzer {
                blocks.RemoveAt (i - 1);
          blocks.Reverse ();
 
-         int hitscount = 0;
+         int cHits = 0;
          var code = File.ReadAllLines (file);
          for (int i = 0; i < code.Length; i++)
             code[i] = code[i].Replace ('<', '\u00ab').Replace ('>', '\u00bb');
          foreach (var block in blocks) {
             bool hit = hits[block.Id] > 0;
-            if (hit) hitscount++;
-            string endtag = hit ? $"<span class=\"tooltiptext\">{hits[block.Id]}hits</span></div>" : "</div>";
+            if (hit) cHits++;
+            string endtag = hit ? $"<span class=\"tooltiptext\">{hits[block.Id]} hits</span></div>" : "</div>";
             string starttag = $"<div class=\"{(hit ? "hit" : "unhit")}\">";
-            int multilines = block.ELine - block.SLine;
-            if (multilines > 0) {
-               for (int i = multilines; i >= 0; i--) {
-                  int scol = 0;
-                  foreach (char ch in code[block.SLine + i])
-                     if (char.IsWhiteSpace (ch)) scol++;
-                     else break;
-                  code[block.SLine + i] = code[block.SLine + i].Insert (code[block.SLine + i].Length, endtag);
-                  code[block.SLine + i] = code[block.SLine + i].Insert (scol, starttag);
-               }
-            } else {
-               code[block.ELine] = code[block.ELine].Insert (block.ECol, endtag);
-               code[block.SLine] = code[block.SLine].Insert (block.SCol, starttag);
+            for (int i = block.ELine; i >= block.SLine; i--) {
+               int scol = 0;
+               foreach (char ch in code[i])
+                  if (char.IsWhiteSpace (ch)) scol++;
+                  else break;
+               code[i] = code[i].Insert (i == block.ELine ? block.ECol : code[i].Length, endtag);
+               code[i] = code[i].Insert (i == block.SLine ? block.SCol : scol, starttag);
             }
          }
 
-         double sumpercent = Math.Round (100.0 * hitscount / blocks.Count, 1);
+         double sumpercent = Math.Round (100.0 * cHits / blocks.Count, 1);
 
-         mSum.Add (new Summary (Path.GetFileNameWithoutExtension (file), blocks.Count, hitscount, sumpercent));
+         mSum.Add (new Summary (Path.GetFileNameWithoutExtension (file), blocks.Count, cHits, sumpercent));
 
          string htmlfile = $"{Dir}/HTML/{Path.GetFileNameWithoutExtension (file)}.html";
 
@@ -198,14 +194,12 @@ class Analyzer {
             .hit { 
                position: relative;
                display: inline-block;
-               border-bottom: 1px dotted black;
                background-color:aqua;
             }
 
             .unhit { 
                position: relative;
                display: inline-block;
-               border-bottom: 1px dotted black;
                background-color:orange;
             }
             
@@ -236,10 +230,10 @@ class Analyzer {
       }
       var cSum = mSum.OrderBy (a => a.Percent).ToList ();
 
-      string sumcov = "";
+      var sumcov = new StringBuilder ();
 
       for (int i = 0; i < cSum.Count; i++) {
-         sumcov += $"""
+        sumcov.AppendLine($"""
                <tr>
                   <td>{i + 1}</td>
                   <td>{cSum[i].Filename}</td>
@@ -248,7 +242,7 @@ class Analyzer {
                   <td>{cSum[i].Percent}%</td>
                </tr>
 
-            """;
+            """);
       }
 
       string summaryfile = $"{Dir}/HTML/CoverageSummary.html";
@@ -330,16 +324,7 @@ class Block {
    static string sLastFile = "";
 }
 
-class Summary {
-   public Summary (string filename, int counts, int hits, double percent) {
-      (Filename, Counts, Hits, Percent) = (filename, counts, hits, percent);
-   }
-
-   public readonly string Filename;
-   public readonly int Counts;
-   public readonly int Hits;
-   public readonly double Percent;
-}
+record Summary (string Filename, int Counts, int Hits, double Percent);
 
 static class Program {
    public static void Main () {
